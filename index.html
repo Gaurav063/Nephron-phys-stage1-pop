@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>3D nephron twin</title>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>window.addEventListener('error',function(e){var d=document.getElementById('err');if(!d){d=document.createElement('pre');d.id='err';d.style.cssText='white-space:pre-wrap;color:#b00;background:#fee;padding:10px;margin:0;font-size:12px';(document.body||document.documentElement).prepend(d)}d.textContent+=(e.message||('Failed to load: '+(e.target&&(e.target.src||e.target.href))))+'\n'},true)</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
 :root{--bg:#eaf0f3;--surface:#fbfdfe;--ink:#13222c;--mute:#5b6b76;--line:#cfdae0;--accent:#0f5e73;--stage:#dfe8ed;
@@ -191,11 +192,11 @@ IDS.concat(['state']).forEach(i=>$(i).addEventListener('input',run));
 $('mode').addEventListener('input',e=>{mode=e.target.value;legend();upd()});$('t').addEventListener('input',upd);
 let playing=false,last=performance.now();$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'Pause':'Play'};
 const col=new THREE.Color(),tmp=new THREE.Vector3();
-function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;
+function frame(now){const dt=Math.min(.05,Math.max(0,(now-last)/1000));last=now;
  if(playing){const t=$('t');let v=+t.value+dt*P0.hours/20;if(v>P0.hours)v=0;t.value=v;upd()}
  [base,drug].forEach(n=>{const pa=n.geo.attributes.position,sa=n.geo.attributes.aSize,ca=n.geo.attributes.aColor;
-  n.P.forEach((q,i)=>{const k=KEYS[q.si],s=n.seg[k],rel=n.rel[k]||1;q.u+=dt*(.04+.07*rel)*q.sp;if(q.u>1)q.u-=1;
-   const pt=s.pts[Math.min(160,Math.floor(q.u*160))],v=(n.vis[k]||[1,0,0])[q.t],on=q.t===0&&s.vessel?q.th<.5:q.th<v,r=s.cur*.55;
+  n.P.forEach((q,i)=>{const k=KEYS[q.si],s=n.seg[k],rel=n.rel[k]||1;q.u=(((q.u+dt*(.04+.07*rel)*q.sp)%1)+1)%1;
+   const pt=s.pts[Math.max(0,Math.min(160,Math.floor(q.u*160)||0))],v=(n.vis[k]||[1,0,0])[q.t],on=q.t===0&&s.vessel?q.th<.5:q.th<v,r=s.cur*.55;
    pa.setXYZ(i,pt.x+q.o[0]*r,pt.y+q.o[1]*r,pt.z+q.o[2]*r);sa.setX(i,on?(q.t===0?.34:.42):0);const c=(s.vessel?PC.blood:PC.tube)[q.t];ca.setXYZ(i,c[0],c[1],c[2])});
   pa.needsUpdate=sa.needsUpdate=ca.needsUpdate=true;
   pickables.forEach(m=>{if(m.userData.hl&&m.material.emissive)m.material.emissive.setHex(m.userData.id===sel?0x2a2a2a:0)})});
