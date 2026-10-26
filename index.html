@@ -1,1 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>3D nephron twin</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{--bg:#eaf0f3;--surface:#fbfdfe;--ink:#13222c;--mute:#5b6b76;--line:#cfdae0;--accent:#0f5e73;--stage:#dfe8ed;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0e1a21;--surface:#15252e;--ink:#e4eef3;--mute:#8fa3ae;--line:#27404c;--accent:#6cc3dc;--stage:#0b141a}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0e1a21;--surface:#15252e;--ink:#e4eef3;--mute:#8fa3ae;--line:#27404c;--accent:#6cc3dc;--stage:#0b141a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1240px;margin:0 auto;padding:18px 14px 36px}
+h1{font-size:25px;margin:0 0 4px;line-height:1.2}.sub{color:var(--mute);margin:0 0 14px;max-width:80ch}
+.stage{position:relative;height:min(68vh,600px);min-height:380px;background:var(--stage);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+#labels{position:absolute;inset:0;pointer-events:none}
+.lb{position:absolute;left:0;top:0;font-size:11.5px;font-weight:500;padding:1px 6px;border-radius:4px;background:var(--surface);border:1px solid var(--line);white-space:nowrap;opacity:.92}
+.lb.t{font-size:13px;font-weight:700;color:var(--accent)}
+.legend,.hint{position:absolute;left:10px;font-size:12px;color:var(--mute);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 8px;max-width:calc(100% - 20px)}
+.legend{bottom:10px}.hint{top:10px}
+.gr{height:8px;border-radius:4px;margin-top:4px;min-width:180px}
+.bar{display:flex;align-items:center;gap:12px;margin:10px 0;flex-wrap:wrap}
+.bar input{flex:1;min-width:160px;accent-color:var(--accent)}.bar b{min-width:80px;font-variant-numeric:tabular-nums}
+button{font:inherit;padding:6px 14px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px}
+.panel h2{font-size:15px;margin:0 0 8px}
+.ctl{margin-bottom:9px}.ctl label{display:flex;justify-content:space-between;font-size:13px;color:var(--mute)}.ctl label b{color:var(--ink);font-variant-numeric:tabular-nums}
+.ctl input[type=range]{width:100%;accent-color:var(--accent)}
+select{width:100%;padding:6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+td,th{padding:4px 4px;border-bottom:1px solid var(--line);text-align:right}td:first-child,th:first-child{text-align:left;color:var(--mute)}th{font-weight:600}
+.d{color:var(--accent);font-weight:600}.note{font-size:12.5px;color:var(--mute);margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>3D nephron digital twin</h1>
+<p class="sub">Two identical nephrons side by side: left has no drug, right receives aspirin and paracetamol. Wall diameter, colour and moving particles are driven by the model, so you can watch anatomical, physiological and chemical changes over time.</p>
+<div class="stage"><canvas id="cv"></canvas><div id="labels"></div><div class="hint">Drag to rotate · scroll or pinch to zoom · click a segment</div><div class="legend" id="legend"></div></div>
+<div class="bar"><button id="play">Play</button><input type="range" id="t" min="0" max="24" step="0.05" value="2"><b id="tlab"></b><button id="reset">Reset view</button></div>
+<div class="cols">
+<div class="panel"><h2>Drugs and patient</h2>
+<div class="ctl"><label>Aspirin per dose <b id="v_asa"></b></label><input type="range" id="asa" min="0" max="1500" step="25" value="650"></div>
+<div class="ctl"><label>Paracetamol per dose <b id="v_par"></b></label><input type="range" id="par" min="0" max="4000" step="100" value="1000"></div>
+<div class="ctl"><label>Number of doses <b id="v_n"></b></label><input type="range" id="n" min="1" max="6" step="1" value="1"></div>
+<div class="ctl"><label>Hours between doses <b id="v_gap"></b></label><input type="range" id="gap" min="4" max="12" step="1" value="6"></div>
+<div class="ctl"><label>Duration <b id="v_hours"></b></label><input type="range" id="hours" min="12" max="72" step="6" value="24"></div>
+<div class="ctl"><label>Baseline GFR <b id="v_gfr"></b></label><input type="range" id="gfr" min="30" max="125" step="5" value="125"></div>
+<div class="ctl"><label>Urine pH <b id="v_ph"></b></label><input type="range" id="ph" min="5" max="8" step="0.1" value="6"></div>
+<div class="ctl"><label>Volume state</label><select id="state"><option value="wet">Well hydrated</option><option value="dry">Dehydrated (RAAS active)</option></select></div>
+<div class="ctl"><label>Colour lumen by</label><select id="mode"><option value="na">Sodium concentration</option><option value="sal">Salicylate concentration</option><option value="inj">Tubular injury</option></select></div>
+</div>
+<div class="panel"><h2>Whole-body readout</h2><table id="ro"></table>
+<p class="note">Particles: blue = sodium, amber = salicylate, cyan = paracetamol, red = blood. Density follows concentration and speed follows flow. Arteriole and tubule radii are exaggerated so changes are visible.</p></div>
+<div class="panel"><h2 id="seltitle">Selected segment</h2><table id="sel"></table>
+<p class="note">Educational model with illustrative parameters, not for clinical decisions. Potassium, acid–base balance and tubuloglomerular feedback are not included.</p></div>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const IDS=['asa','par','n','gap','hours','gfr','ph'],UNIT={asa:' mg',par:' mg',n:'',gap:' h',hours:' h',gfr:' mL/min',ph:''};
+function params(){const p={};IDS.forEach(i=>p[i]=parseFloat($(i).value));p.state=$('state').value;return p}
+const SAMP=25,DT=0.002;
+function sim(p,on){
+ const N=Math.round(p.hours/DT),gA=p.state==='dry'?0.5:0.12,u0=p.state==='dry'?0.02:0.04;
+ let Ag=0,Ap=0,S=0,Pg=0,Pc=0,E=1,G=1,I=0,k=0,uSal=0,vol=0,na=0;
+ const o={t:[],Csal:[],Casa:[],Cpar:[],pg:[],gfr:[],uf:[],una:[],gsh:[],inj:[],seg:[],tot:{}};
+ let minG=1,maxI=0,minGfr=1e9,minPg=100,maxSal=0,maxPar=0;
+ for(let i=0;i<=N;i++){
+  const t=i*DT;
+  if(on&&k<p.n&&t>=k*p.gap-1e-9){Ag+=p.asa;Pg+=p.par;k++}
+  const Casa=Ap/12,Csal=S/12,Cpar=Pc/63;
+  const act=E*(1-0.5*Csal/(Csal+100))*(1-0.3*Cpar/(Cpar+20));
+  const a=1+gA*(1-act),gfr=p.gfr/a*(1-0.3*I);
+  const fPT=0.67*(1-0.4*I),rT=Math.min(.95,.757+.04*(1-act)),rD=.625,rC=Math.min(.97,.8+.06*(1-act));
+  const NaF=gfr*140,NaPT=NaF*(1-fPT),NaT=NaPT*(1-rT),NaD=NaT*(1-rD),NaU=NaD*(1-rC);
+  const Fpt=gfr*0.35,Fl=gfr*0.2,uF=Math.max(0.02,Fl*u0*(1-0.4*(1-act))*(1+0.8*I));
+  const phf=0.05+0.95/(1+Math.pow(10,6.5-p.ph)),fu=Math.min(.9,.15+.01*Csal);
+  const rRen=fu*gfr*0.06*phf*Csal,met=25*S/(60+S);
+  const flux=0.0245*Pc;
+  if(i%SAMP===0){
+   o.t.push(t);o.Csal.push(Csal);o.Casa.push(Casa);o.Cpar.push(Cpar);o.pg.push(act*100);o.gfr.push(gfr);o.uf.push(uF);o.una.push(NaU*0.06);o.gsh.push(G*100);o.inj.push(I*100);
+   o.seg.push({a,act,gfr,Fpt,Fl,uF,naPT:140,naT:NaT/Fl,naD:NaD/Fl,naU:NaU/uF,salU:rRen/(uF*0.06),fr:1-NaU/NaF});
+  }
+  minG=Math.min(minG,G);maxI=Math.max(maxI,I);minGfr=Math.min(minGfr,gfr);minPg=Math.min(minPg,act*100);maxSal=Math.max(maxSal,Csal);maxPar=Math.max(maxPar,Cpar);
+  Ag+=-2.5*Ag*DT;Ap+=(2.5*Ag-3*Ap)*DT;S+=(0.7666*3*Ap-met-rRen)*DT;
+  Pg+=-2*Pg*DT;Pc+=(2*Pg-0.3475*Pc)*DT;
+  E+=(0.06*(1-E)-0.08*Casa*E)*DT;
+  G+=(0.15*(1-G)-flux/600*G)*DT;
+  I+=(0.5*Math.max(0,0.3-G)/0.3-0.02*I)*DT;I=Math.min(1,Math.max(0,I));
+  uSal+=rRen*DT;vol+=uF*0.06*DT;na+=NaU*0.06*DT;
+ }
+ o.tot={vol,na,uSal,minGfr,minPg,maxSal,maxPar,minG:minG*100,maxI:maxI*100};
+ return o;
+}
 
+let R_,B_,ref,mode='na',sel='pt',P0;
+const SEGS={aff:'Afferent arteriole',eff:'Efferent arteriole',glom:'Glomerulus',pt:'Proximal tubule',loop:'Loop of Henle',md:'Macula densa',dt:'Distal tubule',cd:'Collecting duct and urine'};
+const SPEC={glom:[['Filtration (mL/min)','gfr',1],['Prostaglandin synthesis (%)','pg',0]],
+aff:[['Radius (% of normal)','rad',0],['Arteriolar tone (× normal)','tone',2],['Plasma salicylate (mg/L)','csal',1],['Plasma paracetamol (mg/L)','cpar',1]],
+eff:[['Plasma salicylate (mg/L)','csal',1],['Plasma paracetamol (mg/L)','cpar',1]],
+pt:[['Flow (mL/min)','flow',1],['Sodium (mEq/L)','Na',0],['Salicylate in lumen (mg/L)','sal',1],['Paracetamol in lumen (mg/L)','par',1],['Tubular injury (%)','inj',0]],
+loop:[['Flow out (mL/min)','flow',1],['Sodium at exit (mEq/L)','Na',0],['Salicylate (mg/L)','sal',1]],
+md:[['Sodium sensed (mEq/L)','Na',0]],
+dt:[['Flow (mL/min)','flow',1],['Sodium out (mEq/L)','Na',0],['Salicylate (mg/L)','sal',1]],
+cd:[['Urine flow (mL/min)','flow',2],['Urine sodium (mEq/L)','Na',0],['Urine salicylate (mg/L)','sal',0],['Urine paracetamol (mg/L)','par',0],['Urine pH','ph',1]]};
+/* ---------- scene ---------- */
+const cv=$('cv'),V=(x,y,z)=>new THREE.Vector3(x,y,z);
+let renderer;try{renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true})}catch(e){document.querySelector('.stage').innerHTML='<p style="padding:16px">WebGL is not available in this browser.</p>'}
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(40,1,.1,100);
+scene.add(new THREE.AmbientLight(0xffffff,.7));const dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(4,8,10);scene.add(dl);
+function gradTex(){const c=document.createElement('canvas');c.width=4;c.height=128;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,128);gr.addColorStop(0,'rgba(170,100,130,.06)');gr.addColorStop(1,'rgba(120,50,110,.34)');g.fillStyle=gr;g.fillRect(0,0,4,128);return new THREE.CanvasTexture(c)}
+const bgp=(w,h,y,mat)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);m.position.set(-1.7,y,-1.8);scene.add(m)};
+bgp(17,4.2,2.4,new THREE.MeshBasicMaterial({color:0xd98c6a,transparent:true,opacity:.12,depthWrite:false}));
+bgp(17,6.1,-2.75,new THREE.MeshBasicMaterial({map:gradTex(),transparent:true,depthWrite:false}));
+function coil(x0,y0,x1,y1,turns,amp,n){const a=[];for(let i=0;i<=n;i++){const t=i/n,q=t*turns*Math.PI*2;a.push(V(x0+(x1-x0)*t+amp*Math.sin(q),y0+(y1-y0)*t,.8*amp*(Math.cos(q)-1)))}return a}
+const cr=a=>new THREE.CatmullRomCurve3(a,false,'centripetal');
+const CURVES={aff:cr([V(-1.4,3.7,0),V(-.9,3.3,0),V(-.35,2.95,0)]),eff:cr([V(.3,2.95,0),V(.8,3.4,.1),V(1.4,3.7,.2)]),
+pt:cr(coil(0,2.15,.6,.5,3,.28,60)),loop:cr([V(.6,.5,0),V(.6,-3.8,0),V(.8,-4.3,0),V(1,-3.8,0),V(1,.3,0),V(.75,1.4,.15),V(.45,2.45,.3)]),
+dt:cr([V(.45,2.45,.3),V(.95,2.85,.4),V(1.45,2.3,.1),V(1.15,1.8,.4),V(1.65,1.5,.1),V(1.45,1.1,.4),V(2,.8,0)]),cd:cr([V(2,.8,0),V(2,-2,0),V(2,-4.9,0),V(2,-5.5,0)])};
+const R0={aff:.09,eff:.07,pt:.13,loop:.09,dt:.08,cd:.07},KEYS=['aff','eff','pt','loop','dt','cd'],pickables=[];
+const pm=new THREE.ShaderMaterial({transparent:true,depthWrite:false,uniforms:{pr:{value:1}},
+vertexShader:'uniform float pr;attribute float aSize;attribute vec3 aColor;varying vec3 vC;void main(){vC=aColor;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*pr*220./-mv.z;gl_Position=projectionMatrix*mv;}',
+fragmentShader:'varying vec3 vC;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;gl_FragColor=vec4(vC,1.-d);}'});
+const PC={blood:[[.78,.18,.15],[.95,.62,.1],[.2,.85,.95]],tube:[[.55,.75,1],[.95,.62,.1],[.2,.85,.95]]},PER=26;
+function build(x){
+ const g=new THREE.Group();g.position.x=x;scene.add(g);const n={g,seg:{}};
+ KEYS.forEach(k=>{const vessel=k==='aff'||k==='eff',mat=new THREE.MeshPhongMaterial({color:vessel?0xc0392b:0x4fb3a9,transparent:true,opacity:vessel?.85:.6,shininess:60,depthWrite:false});
+  const s={curve:CURVES[k],mat,pts:CURVES[k].getSpacedPoints(160),cur:0,vessel};s.mesh=new THREE.Mesh(new THREE.BufferGeometry(),mat);s.mesh.userData={id:k,hl:1};setR(s,R0[k]);g.add(s.mesh);pickables.push(s.mesh);n.seg[k]=s});
+ const cap=new THREE.Mesh(new THREE.SphereGeometry(.5,24,18),new THREE.MeshPhongMaterial({color:0xbfd6e6,transparent:true,opacity:.28,depthWrite:false}));cap.position.set(0,2.6,0);cap.userData={id:'glom',hl:1};
+ const tuft=new THREE.Mesh(new THREE.SphereGeometry(.34,20,16),new THREE.MeshPhongMaterial({color:0xe07a8a,emissive:0x331015}));tuft.position.copy(cap.position);tuft.userData={id:'glom'};
+ const md=new THREE.Mesh(new THREE.SphereGeometry(.1,14,12),new THREE.MeshPhongMaterial({color:0x7cfc00,emissive:0x2b5d2b}));md.position.copy(CURVES.loop.getPoint(1));md.userData={id:'md'};
+ g.add(cap,tuft,md);pickables.push(cap,tuft,md);Object.assign(n,{cap,tuft,md});
+ const N=KEYS.length*3*PER,P=[];KEYS.forEach((k,si)=>{for(let t=0;t<3;t++)for(let i=0;i<PER;i++)P.push({si,t,u:Math.random(),sp:.7+.6*Math.random(),th:Math.random(),o:[Math.random()-.5,Math.random()-.5,Math.random()-.5]})});
+ const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));geo.setAttribute('aSize',new THREE.BufferAttribute(new Float32Array(N),1));geo.setAttribute('aColor',new THREE.BufferAttribute(new Float32Array(N*3),3));
+ const pts=new THREE.Points(geo,pm);pts.frustumCulled=false;g.add(pts);Object.assign(n,{P,geo,vis:{},rel:{}});return n}
+function setR(s,r){if(s.cur&&Math.abs(r-s.cur)/s.cur<.03)return;s.cur=r;s.mesh.geometry.dispose();s.mesh.geometry=new THREE.TubeGeometry(s.curve,90,r,10,false)}
+const base=build(-4.4),drug=build(1.4);
+function tubeColor(k,i,I){const c=new THREE.Color();
+ if(mode==='na')return c.set(0xd9eef9).lerp(new THREE.Color(0x1d5aa6),Math.min(1,i.Na/140));
+ if(mode==='sal')return c.set(0xf6ecd8).lerp(new THREE.Color(0xd9780a),Math.min(1,i.sal/60));
+ return c.set(0x4fb3a9).lerp(new THREE.Color(0x7a3b1d),k==='pt'?Math.min(1,I*1.5):0)}
+function setN(n,D,ix,p){
+ const s=D.seg[ix],I=D.inj[ix]/100,cs=D.Csal[ix],cp=D.Cpar[ix],fr=Math.min(.9,.15+.01*cs)*cs,
+ g={gfr:s.gfr,pg:D.pg[ix],tone:s.a,inj:I*100,csal:cs,cpar:cp,ph:p.ph},
+ F={pt:s.Fpt,loop:s.Fl,dt:s.Fl,cd:s.uF},rf={pt:ref.Fpt,loop:ref.Fl,dt:ref.Fl,cd:ref.uF},fac={pt:1,loop:.9,dt:.6,cd:.1},Na={pt:140,loop:s.naT,dt:s.naD,cd:s.naU},inf={};
+ ['pt','loop','dt','cd'].forEach(k=>{inf[k]=Object.assign({flow:F[k],Na:Na[k],sal:k==='cd'?s.salU:fr*s.gfr/F[k],par:cp*.8*s.gfr/F[k]*fac[k]},g);n.rel[k]=Math.min(2.5,F[k]/rf[k]);n.seg[k].mat.color.copy(tubeColor(k,inf[k],I))});
+ inf.md=Object.assign({Na:s.naT},g);inf.glom=g;inf.aff=Object.assign({rad:100/s.a},g);inf.eff=g;n.info=inf;n.rel.aff=n.rel.eff=1/s.a;
+ const q=k=>Math.sqrt(F[k]/rf[k]);
+ setR(n.seg.aff,.09/s.a);setR(n.seg.eff,.07);setR(n.seg.pt,.13*(.75+.25*q('pt'))*(1+.35*I));setR(n.seg.loop,.09*(.75+.25*q('loop')));setR(n.seg.dt,.08*(.75+.25*q('dt')));setR(n.seg.cd,.07*(.6+.4*Math.min(2,q('cd'))));
+ const r=s.gfr/ref.gfr;n.tuft.scale.setScalar(.75+.25*r);n.tuft.material.emissive.setRGB(.55*r,.1*r,.12*r);
+ n.md.material.color.set(0x2b5d2b).lerp(new THREE.Color(0x7cfc00),Math.min(1.5,s.naT/ref.naT)/1.5);
+ const c=x=>Math.min(1,Math.max(0,x));
+ KEYS.forEach(k=>{const v=n.seg[k].vessel;n.vis[k]=v?[1,c(cs/25),c(cp/15)]:[c(inf[k].Na/140),c(inf[k].sal/60),c(inf[k].par/60)]})}
+/* ---------- labels ---------- */
+const LB=[];function lab(txt,pos,cls){const e=document.createElement('div');e.className='lb '+(cls||'');e.textContent=txt;$('labels').appendChild(e);LB.push({e,pos})}
+[['Glomerulus',V(.3,2.6,0)],['Proximal tubule',V(.9,1.2,0)],['Loop of Henle',V(1.3,-4.4,0)],['Distal tubule',V(1.7,2.5,0)],['Collecting duct',V(2.3,-3,0)],['Afferent arteriole',V(-1.4,3.9,0)]].forEach(a=>lab(a[0],a[1].clone().add(drug.g.position)));
+lab('No drug',V(-3.6,5,0),'t');lab('With drug',V(2.2,5,0),'t');lab('CORTEX',V(-6.6,2.4,0));lab('MEDULLA',V(-6.6,-2.7,0));
+/* ---------- camera ---------- */
+let th=.35,ph=1.45,dist=16.5;const tgt=V(-1.7,-.7,0),ptrs=new Map(),ray=new THREE.Raycaster(),mv=new THREE.Vector2();let moved=0,lastD=1;
+function cam(){camera.position.set(tgt.x+dist*Math.sin(ph)*Math.sin(th),tgt.y+dist*Math.cos(ph),dist*Math.sin(ph)*Math.cos(th));camera.lookAt(tgt)}
+const pd=()=>{const a=[...ptrs.values()];return a.length<2?1:Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1])};
+function hit(e){const r=cv.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,camera);const h=ray.intersectObjects(pickables,false);return h.length?h[0].object.userData.id:null}
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);moved=0;lastD=pd()});
+cv.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId)){cv.style.cursor=hit(e)?'pointer':'grab';return}
+ const o=ptrs.get(e.pointerId),dx=e.clientX-o[0],dy=e.clientY-o[1];ptrs.set(e.pointerId,[e.clientX,e.clientY]);moved+=Math.abs(dx)+Math.abs(dy);
+ if(ptrs.size===1){th-=dx*.008;ph=Math.min(2.9,Math.max(.2,ph-dy*.008))}else{const d=pd();dist=Math.min(32,Math.max(6,dist*lastD/d));lastD=d}cam()});
+cv.addEventListener('pointerup',e=>{ptrs.delete(e.pointerId);if(moved<6){const id=hit(e);if(id){sel=id;panel()}}});
+cv.addEventListener('pointercancel',e=>ptrs.delete(e.pointerId));
+cv.addEventListener('wheel',e=>{e.preventDefault();dist=Math.min(32,Math.max(6,dist*(1+e.deltaY*.001)));cam()},{passive:false});
+$('reset').onclick=()=>{th=.35;ph=1.45;dist=16.5;cam()};
+function resize(){const r=cv.parentElement.getBoundingClientRect(),pr=Math.min(2,window.devicePixelRatio||1);renderer.setPixelRatio(pr);renderer.setSize(r.width,r.height,false);pm.uniforms.pr.value=pr;camera.aspect=r.width/r.height;camera.updateProjectionMatrix()}
+/* ---------- state and UI ---------- */
+const f=(v,d)=>(+v).toFixed(d);
+function panel(){const ib=base.info[sel],id=drug.info[sel];$('seltitle').textContent=SEGS[sel];
+ $('sel').innerHTML='<tr><th></th><th>No drug</th><th>With drug</th><th>Change</th></tr>'+SPEC[sel].map(r=>{const b=ib[r[1]],d=id[r[1]],ch=Math.abs(b)>1e-6?((d-b)/b*100):null;return `<tr><td>${r[0]}</td><td>${f(b,r[2])}</td><td>${f(d,r[2])}</td><td class="d">${ch==null?'–':(ch>=0?'+':'')+f(ch,0)+'%'}</td></tr>`}).join('')}
+function upd(){const tv=parseFloat($('t').value),ix=Math.min(R_.t.length-1,Math.round(tv/(SAMP*DT))),p=P0;
+ $('tlab').textContent='Hour '+f(tv,1);setN(base,B_,ix,p);setN(drug,R_,ix,p);panel();
+ const T=(l,a,b,d)=>`<tr><td>${l}</td><td>${f(a,d)}</td><td>${f(b,d)}</td></tr>`;
+ $('ro').innerHTML='<tr><th></th><th>No drug</th><th>With drug</th></tr>'+T('Plasma salicylate (mg/L)',0,R_.Csal[ix],1)+T('Plasma paracetamol (mg/L)',0,R_.Cpar[ix],1)+T('Prostaglandin synthesis (%)',B_.pg[ix],R_.pg[ix],0)+T('GFR (mL/min)',B_.gfr[ix],R_.gfr[ix],1)+T('Urine flow (mL/min)',B_.uf[ix],R_.uf[ix],2)+T('Urine sodium (mEq/h)',B_.una[ix],R_.una[ix],2)+T('Glutathione reserve (%)',B_.gsh[ix],R_.gsh[ix],0)+T('Tubular injury (%)',B_.inj[ix],R_.inj[ix],0)}
+function legend(){const L={na:['Sodium: pale = dilute, blue = about 140 mEq/L','linear-gradient(90deg,#d9eef9,#1d5aa6)'],sal:['Salicylate: pale = none, amber = 60 mg/L or more','linear-gradient(90deg,#f6ecd8,#d9780a)'],inj:['Proximal tubule injury: teal = healthy, brown = injured','linear-gradient(90deg,#4fb3a9,#7a3b1d)']}[mode];$('legend').innerHTML=L[0]+'<div class="gr" style="background:'+L[1]+'"></div>'}
+function run(){const p=params();P0=p;IDS.forEach(i=>$('v_'+i).textContent=(i==='ph'?p[i].toFixed(1):p[i])+UNIT[i]);const t=$('t');t.max=p.hours;if(+t.value>p.hours)t.value=p.hours;
+ R_=sim(p,true);B_=sim(p,false);ref=B_.seg[0];upd()}
+IDS.concat(['state']).forEach(i=>$(i).addEventListener('input',run));
+$('mode').addEventListener('input',e=>{mode=e.target.value;legend();upd()});$('t').addEventListener('input',upd);
+let playing=false,last=performance.now();$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'Pause':'Play'};
+const col=new THREE.Color(),tmp=new THREE.Vector3();
+function frame(now){const dt=Math.min(.05,(now-last)/1000);last=now;
+ if(playing){const t=$('t');let v=+t.value+dt*P0.hours/20;if(v>P0.hours)v=0;t.value=v;upd()}
+ [base,drug].forEach(n=>{const pa=n.geo.attributes.position,sa=n.geo.attributes.aSize,ca=n.geo.attributes.aColor;
+  n.P.forEach((q,i)=>{const k=KEYS[q.si],s=n.seg[k],rel=n.rel[k]||1;q.u+=dt*(.04+.07*rel)*q.sp;if(q.u>1)q.u-=1;
+   const pt=s.pts[Math.min(160,Math.floor(q.u*160))],v=(n.vis[k]||[1,0,0])[q.t],on=q.t===0&&s.vessel?q.th<.5:q.th<v,r=s.cur*.55;
+   pa.setXYZ(i,pt.x+q.o[0]*r,pt.y+q.o[1]*r,pt.z+q.o[2]*r);sa.setX(i,on?(q.t===0?.34:.42):0);const c=(s.vessel?PC.blood:PC.tube)[q.t];ca.setXYZ(i,c[0],c[1],c[2])});
+  pa.needsUpdate=sa.needsUpdate=ca.needsUpdate=true;
+  pickables.forEach(m=>{if(m.userData.hl&&m.material.emissive)m.material.emissive.setHex(m.userData.id===sel?0x2a2a2a:0)})});
+ const r=cv.getBoundingClientRect();LB.forEach(l=>{tmp.copy(l.pos).project(camera);const vis=tmp.z<1;l.e.style.display=vis?'':'none';l.e.style.transform=`translate(${(tmp.x*.5+.5)*r.width}px,${(-tmp.y*.5+.5)*r.height}px) translate(-50%,-50%)`});
+ renderer.render(scene,camera);requestAnimationFrame(frame)}
+if(renderer){new ResizeObserver(resize).observe(cv.parentElement);resize();cam();legend();run();requestAnimationFrame(frame)}
+</script>
+</body>
+</html>
